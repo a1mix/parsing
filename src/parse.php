@@ -182,11 +182,14 @@ for ($page = 1; $page <= $total_pages; $page++) {
             $iframe = $detail_crawler->filter('iframe')->attr('src', '');
             $row_data = [$short_title, $preview_text, $preview_image, $tags_str, $game_id, $player_id, $staff_id, $date_str, $full_title, $iframe];
         } else {
-            $main_tag = $detail_crawler->filter('main')->html('');
+            $text = $detail_crawler->filter('main')->html('');
+            $text = preg_replace('/\s+/', ' ', $text); // Заменяем множественные пробелы на один
+            $text = preg_replace('/>\s+</', '><', $text); // Удаляем пробелы между тегами
+            $text = trim($text); // Удаляем пробелы в начале и конце
             $images = $detail_crawler->filter('main img')->each(function (Crawler $node) {
                 return $node->attr('data-src') ?? $node->attr('src');
             });
-            $row_data = [$short_title, $preview_text, $preview_image, $tags_str, $game_id, $player_id, $staff_id,  $date_str, $full_title, $main_tag, implode(',', $images)];
+            $row_data = [$short_title, $preview_text, $preview_image, $tags_str, $game_id, $player_id, $staff_id,  $date_str, $full_title, $text, implode(',', $images)];
         }
         $fp = fopen($csv_files[$csv_type], 'a');
         fputcsv($fp, $row_data);
