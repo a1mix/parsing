@@ -13,9 +13,9 @@ $csv_files = [
 
 // Заголовки для CSV-файлов
 $headers = [
-    'photo' => ['shortTitle', 'previewText', 'previewImage', 'tags', 'gameId', 'personId', 'datePublication', 'fullTitle', 'images'],
-    'video' => ['shortTitle', 'previewText', 'previewImage', 'tags', 'gameId', 'personId', 'datePublication', 'fullTitle', 'link'],
-    'news' => ['shortTitle', 'previewText', 'previewImage', 'tags', 'gameId', 'personId', 'datePublication', 'fullTitle', 'text', 'images']
+    'photo' => ['shortTitle', 'previewText', 'previewImage', 'tags', 'gameId', 'playerId', 'staffId', 'datePublication', 'fullTitle', 'images'],
+    'video' => ['shortTitle', 'previewText', 'previewImage', 'tags', 'gameId', 'playerId', 'staffId', 'datePublication', 'fullTitle', 'link'],
+    'news' => ['shortTitle', 'previewText', 'previewImage', 'tags', 'gameId', 'playerId', 'staffId', 'datePublication', 'fullTitle', 'text', 'images']
 ];
 
 // Создание CSV-файлов с заголовками
@@ -66,13 +66,32 @@ function get_game_id($linked_post_url) {
 }
 
 
-function get_person_id($linked_post_url) {
+
+// TODO: Учесть, что в одной новости может быть и игрок и тренер 
+function get_person_info($linked_post_url) {
     if (!$linked_post_url) {
         return null;
     }
+
+    $path = parse_url($linked_post_url, PHP_URL_PATH);
     $query = parse_url($linked_post_url, PHP_URL_QUERY);
     parse_str($query, $params);
-    return $params['person'] ?? null;
+
+    $type = null;
+    if (strpos($path, 'igrok') !== false) {
+        $type = 'player';
+    } elseif (strpos($path, 'trener') !== false) {
+        $type = 'staff';
+    }
+
+    if ($type && isset($params['person'])) {
+        return [
+            'type' => $type,
+            'person' => $params['person']
+        ];
+    }
+
+    return null;
 }
 
 // Основной URL для парсинга
@@ -114,7 +133,18 @@ for ($page = 1; $page <= $total_pages; $page++) {
         }
         $linked_post = $item_crawler->filter('a.linked_post')->attr('href', '');
         $game_id = get_game_id($linked_post);
-        $person_id = get_person_id($linked_post);
+        $person_info = get_person_info($linked_post);
+        $staff_id =  null;
+        $player_id = null;
+        if ($person_info) {
+            if ($person_info['type'] == 'staff') {
+                $staff_id = $person_info['person'];
+            }
+            if ($person_info['type'] == 'player') {
+                $player_id = $person_info['person'];
+            }
+        }
+        
         $date_span = $item_crawler->filter('span.date')->text('');
         $date_publication = parse_date($date_span);
         $date_str = $date_publication ? $date_publication->format('Y-m-d H:i:s') : '';
@@ -135,16 +165,16 @@ for ($page = 1; $page <= $total_pages; $page++) {
             $images = $detail_crawler->filter('img.owl-lazy')->each(function (Crawler $node) {
                 return $node->attr('data-src');
             });
-            $row_data = [$short_title, $preview_text, $preview_image, $tags_str, $game_id, $date_str, $full_title, implode(',', $images)];
+            $row_data = [$short_title, $preview_text, $preview_image, $tags_str, $game_id, $player_id, $staff_id, $date_str, $full_title, implode(',', $images)];
         } elseif ($csv_type == 'video') {
             $iframe = $detail_crawler->filter('iframe')->attr('src', '');
-            $row_data = [$short_title, $preview_text, $preview_image, $tags_str, $game_id, $date_str, $full_title, $iframe];
+            $row_data = [$short_title, $preview_text, $preview_image, $tags_str, $game_id, $player_id, $staff_id, $date_str, $full_title, $iframe];
         } else {
             $main_tag = $detail_crawler->filter('main')->html('');
             $images = $detail_crawler->filter('main img')->each(function (Crawler $node) {
                 return $node->attr('data-src') ?? $node->attr('src');
             });
-            $row_data = [$short_title, $preview_text, $preview_image, $tags_str, $game_id, $person_id,  $date_str, $full_title, $main_tag, implode(',', $images)];
+            $row_data = [$short_title, $preview_text, $preview_image, $tags_str, $game_id, $player_id, $staff_id,  $date_str, $full_title, $main_tag, implode(',', $images)];
         }
         $fp = fopen($csv_files[$csv_type], 'a');
         fputcsv($fp, $row_data);
