@@ -13,9 +13,9 @@ $csv_files = [
 
 // Заголовки для CSV-файлов
 $headers = [
-    'photo' => ['shortTitle', 'previewText', 'previewImage', 'tags', 'gameId', 'datePublication', 'fullTitle', 'images'],
-    'video' => ['shortTitle', 'previewText', 'previewImage', 'tags', 'gameId', 'datePublication', 'fullTitle', 'link'],
-    'news' => ['shortTitle', 'previewText', 'previewImage', 'tags', 'gameId', 'datePublication', 'fullTitle', 'text', 'images']
+    'photo' => ['shortTitle', 'previewText', 'previewImage', 'tags', 'gameId', 'personId', 'datePublication', 'fullTitle', 'images'],
+    'video' => ['shortTitle', 'previewText', 'previewImage', 'tags', 'gameId', 'personId', 'datePublication', 'fullTitle', 'link'],
+    'news' => ['shortTitle', 'previewText', 'previewImage', 'tags', 'gameId', 'personId', 'datePublication', 'fullTitle', 'text', 'images']
 ];
 
 // Создание CSV-файлов с заголовками
@@ -62,7 +62,17 @@ function get_game_id($linked_post_url) {
     }
     $query = parse_url($linked_post_url, PHP_URL_QUERY);
     parse_str($query, $params);
-    return $params['gameId'] ?? null;
+    return $params['match'] ?? null;
+}
+
+
+function get_person_id($linked_post_url) {
+    if (!$linked_post_url) {
+        return null;
+    }
+    $query = parse_url($linked_post_url, PHP_URL_QUERY);
+    parse_str($query, $params);
+    return $params['person'] ?? null;
 }
 
 // Основной URL для парсинга
@@ -104,6 +114,7 @@ for ($page = 1; $page <= $total_pages; $page++) {
         }
         $linked_post = $item_crawler->filter('a.linked_post')->attr('href', '');
         $game_id = get_game_id($linked_post);
+        $person_id = get_person_id($linked_post);
         $date_span = $item_crawler->filter('span.date')->text('');
         $date_publication = parse_date($date_span);
         $date_str = $date_publication ? $date_publication->format('Y-m-d H:i:s') : '';
@@ -133,7 +144,7 @@ for ($page = 1; $page <= $total_pages; $page++) {
             $images = $detail_crawler->filter('main img')->each(function (Crawler $node) {
                 return $node->attr('data-src') ?? $node->attr('src');
             });
-            $row_data = [$short_title, $preview_text, $preview_image, $tags_str, $game_id, $date_str, $full_title, $main_tag, implode(',', $images)];
+            $row_data = [$short_title, $preview_text, $preview_image, $tags_str, $game_id, $person_id,  $date_str, $full_title, $main_tag, implode(',', $images)];
         }
         $fp = fopen($csv_files[$csv_type], 'a');
         fputcsv($fp, $row_data);
