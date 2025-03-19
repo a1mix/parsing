@@ -56,44 +56,49 @@ function parse_date($date_str) {
 }
 
 // Функция для извлечения gameId из ссылки
-function get_game_id($linked_post_url) {
-    if (!$linked_post_url) {
-        return null;
+function get_game_id($linked_post_urls) {
+    $matches = [];
+    foreach ($linked_post_urls as $url) {
+        if (!$url) {
+            continue;
+        }
+        $query = parse_url($url, PHP_URL_QUERY);
+        parse_str($query, $params);
+
+        if(isset($params['match'])) $matches[] =  $params['match'];
     }
-    $query = parse_url($linked_post_url, PHP_URL_QUERY);
-    parse_str($query, $params);
-    return $params['match'] ?? null;
+    return $matches ?? null;
 }
 
+function get_person_info($linked_post_urls) {
+    $persons = [];
 
+    foreach ($linked_post_urls as $url) {
+        if (!$url) {
+            continue;
+        }
 
-// TODO: Учесть, что в одной новости может быть и игрок и тренер 
-function get_person_info($linked_post_url) {
-    if (!$linked_post_url) {
-        return null;
+        $path = parse_url($url, PHP_URL_PATH);
+        $query = parse_url($url, PHP_URL_QUERY);
+        parse_str($query, $params);
+
+        $type = null;
+        if (strpos($path, 'igrok') !== false) {
+            $type = 'player';
+        } elseif (strpos($path, 'trener') !== false) {
+            $type = 'staff';
+        }
+
+        if ($type && isset($params['person'])) {
+            $persons[] = [
+                'type' => $type,
+                'person' => $params['person']
+            ];
+        }
     }
 
-    $path = parse_url($linked_post_url, PHP_URL_PATH);
-    $query = parse_url($linked_post_url, PHP_URL_QUERY);
-    parse_str($query, $params);
-
-    $type = null;
-    if (strpos($path, 'igrok') !== false) {
-        $type = 'player';
-    } elseif (strpos($path, 'trener') !== false) {
-        $type = 'staff';
-    }
-
-    if ($type && isset($params['person'])) {
-        return [
-            'type' => $type,
-            'person' => $params['person']
-        ];
-    }
-
-    return null;
+    return $persons;
 }
-
 // Основной URL для парсинга
 $base_url = "https://fcakron.ru/novosti/";
 
@@ -121,7 +126,7 @@ for ($page = 1; $page <= $total_pages; $page++) {
         $short_title = $item_crawler->filter('strong.title')->text('');
         $preview_text = $item_crawler->filter('div.description')->text('');
         $preview_image = $item_crawler->filter('img.cover')->attr('src', '');
-        $tags = $item_crawler->filter('ul.tag-cloud a')->each(function (Crawler $node) {
+        $tags = $item_crawler->filter('ul.tag-cloud a.btn')->each(function (Crawler $node) {
             return $node->text();
         });
         $tags_str = implode(',', $tags);
@@ -131,19 +136,26 @@ for ($page = 1; $page <= $total_pages; $page++) {
         } elseif (in_array('Видео', $tags)) {
             $csv_type = 'video';
         }
-        $linked_post = $item_crawler->filter('a.linked_post')->attr('href', '');
-        $game_id = get_game_id($linked_post);
-        $person_info = get_person_info($linked_post);
-        $staff_id =  null;
-        $player_id = null;
-        if ($person_info) {
-            if ($person_info['type'] == 'staff') {
-                $staff_id = $person_info['person'];
-            }
-            if ($person_info['type'] == 'player') {
-                $player_id = $person_info['person'];
+        $linked_posts = $item_crawler->filter('a.linked_post')->each(function (Crawler $node) {
+            return $node->attr('href');
+        });
+        $game_ids = get_game_id($linked_posts);
+        $game_id = implode(',', $game_ids);
+        $persons_info = get_person_info($linked_posts);
+
+        $staff_ids = [];
+        $player_ids = [];
+
+        foreach ($persons_info as $person) {
+            if ($person['type'] == 'staff') {
+                $staff_ids[] = $person['person'];
+            } elseif ($person['type'] == 'player') {
+                $player_ids[] = $person['person'];
             }
         }
+
+        $staff_id = implode(',', $staff_ids);
+        $player_id = implode(',', $player_ids);
         
         $date_span = $item_crawler->filter('span.date')->text('');
         $date_publication = parse_date($date_span);
